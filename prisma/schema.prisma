@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  vehicles             Vehicle[]
+  appointments         Appointment[]
+  webhookSubscriptions WebhookSubscription[]
+
+  @@map("users")
+}
+
+model Vehicle {
+  id           String @id @default(uuid())
+  ownerId      String @map("owner_id")
+  make         String
+  model        String
+  year         Int
+  licensePlate String @map("license_plate")
+
+  owner        User          @relation(fields: [ownerId], references: [id])
+  appointments Appointment[]
+
+  @@map("vehicles")
+}
+
+model Dealership {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  serviceBays ServiceBay[]
+  technicians Technician[]
+
+  @@map("dealerships")
+}
+
+model ServiceBay {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  dealership   Dealership    @relation(fields: [dealershipId], references: [id])
+  appointments Appointment[]
+
+  @@map("service_bays")
+}
+
+model ServiceType {
+  id              String @id @default(uuid())
+  name            String @unique
+  durationMinutes Int    @map("duration_minutes")
+
+  certifications TechnicianCertification[]
+  appointments   Appointment[]
+
+  @@map("service_types")
+}
+
+model Technician {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  name         String
+  email        String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  dealership     Dealership                @relation(fields: [dealershipId], references: [id])
+  certifications TechnicianCertification[]
+  appointments   Appointment[]
+
+  @@map("technicians")
+}
+
+model TechnicianCertification {
+  technicianId  String @map("technician_id")
+  serviceTypeId String @map("service_type_id")
+
+  technician  Technician  @relation(fields: [technicianId], references: [id])
+  serviceType ServiceType @relation(fields: [serviceTypeId], references: [id])
+
+  @@id([technicianId, serviceTypeId])
+  @@map("technician_certifications")
+}
+
+model Appointment {
+  id            String            @id @default(uuid())
+  customerId    String            @map("customer_id")
+  vehicleId     String            @map("vehicle_id")
+  technicianId  String            @map("technician_id")
+  serviceBayId  String            @map("service_bay_id")
+  serviceTypeId String            @map("service_type_id")
+  startTime     DateTime          @map("start_time")
+  endTime       DateTime          @map("end_time")
+  status        AppointmentStatus @default(CONFIRMED)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  customer    User        @relation(fields: [customerId], references: [id])
+  vehicle     Vehicle     @relation(fields: [vehicleId], references: [id])
+  technician  Technician  @relation(fields: [technicianId], references: [id])
+  serviceBay  ServiceBay  @relation(fields: [serviceBayId], references: [id])
+  serviceType ServiceType @relation(fields: [serviceTypeId], references: [id])
+
+  @@map("appointments")
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  url       String
+  secret    String
+  events    String[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("webhook_subscriptions")
+}
+
+model Outbox {
+  id             String    @id @default(uuid())
+  eventType      String    @map("event_type")
+  payload        Json
+  createdAt      DateTime  @default(now()) @map("created_at")
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  attempts       Int       @default(0)
+  lockedAt       DateTime? @map("locked_at")
+  lockedBy       String?   @map("locked_by")
+  claimToken     String?   @map("claim_token") @db.Uuid
+  processedAt    DateTime? @map("processed_at")
+  deadLetteredAt DateTime? @map("dead_lettered_at")
+
+  @@map("outbox")
+}
