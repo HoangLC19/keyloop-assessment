@@ -23,4 +23,12 @@ describe('validateWebhookUrl', () => {
     await expect(validateWebhookUrl('https://10.0.0.1/hook')).rejects.toThrow(ValidationError);
     await expect(validateWebhookUrl('https://172.16.0.1/hook')).rejects.toThrow(ValidationError);
   });
+
+  it('rejects bracketed IPv6 loopback [::1]', async () => {
+    await expect(validateWebhookUrl('https://[::1]/hook')).rejects.toThrow(ValidationError);
+  });
+
+  it('rejects bracketed IPv6 link-local [fe80::1]', async () => {
+    await expect(validateWebhookUrl('https://[fe80::1]/hook')).rejects.toThrow(ValidationError);
+  });
 });

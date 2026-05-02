@@ -22,7 +22,10 @@ export async function validateWebhookUrl(url: string): Promise<void> {
   try { parsed = new URL(url); } catch { throw new ValidationError('Invalid webhook URL'); }
 
   if (parsed.protocol !== 'https:') throw new ValidationError('Webhook URL must use HTTPS');
-  if (isBlocked(parsed.hostname)) throw new ValidationError('Webhook URL points to a private or loopback address');
+
+  // Node.js keeps brackets in hostname for IPv6 (e.g. "[::1]") — strip them before checking
+  const host = parsed.hostname.replace(/^\[(.+)\]$/, '$1');
+  if (isBlocked(host)) throw new ValidationError('Webhook URL points to a private or loopback address');
 
   const ips = [
     ...(await dns.resolve4(parsed.hostname).catch(() => [])),
