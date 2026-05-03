@@ -1,0 +1,806 @@
+openapi: 3.1.0
+info:
+  title: Unified Service Scheduler
+  version: 1.0.0
+  description: |
+    REST API for scheduling vehicle service appointments at dealerships.
+    Real-time resource constraint checking ensures no bay or technician is double-booked.
+
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [CUSTOMER, ADMIN]
+      required: [id, email, role]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+      required: [token, user]
+
+    Dealership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, address, createdAt]
+
+    ServiceBay:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dealershipId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, dealershipId, name, createdAt]
+
+    ServiceType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        durationMinutes:
+          type: integer
+      required: [id, name, durationMinutes]
+
+    Technician:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dealershipId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+      required: [id, dealershipId, name, email]
+
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        make:
+          type: string
+        model:
+          type: string
+        year:
+          type: integer
+        licensePlate:
+          type: string
+      required: [id, ownerId, make, model, year, licensePlate]
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        technicianId:
+          type: string
+          format: uuid
+        serviceBayId:
+          type: string
+          format: uuid
+        serviceTypeId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [CONFIRMED, CANCELLED]
+      required: [id, customerId, vehicleId, technicianId, serviceBayId, serviceTypeId, startTime, endTime, status]
+
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, url, events, createdAt]
+
+tags:
+  - name: Auth
+    description: Register and log in
+  - name: Vehicles
+    description: Manage your vehicles (CUSTOMER)
+  - name: Appointments
+    description: Book, cancel, and reschedule appointments (CUSTOMER)
+  - name: Webhooks
+    description: Subscribe to appointment events (CUSTOMER)
+  - name: Admin
+    description: Manage dealership resources (ADMIN)
+
+paths:
+  # ── Auth ────────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new customer account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+              required: [email, password]
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Vehicles ────────────────────────────────────────────────────────────────
+
+  /api/vehicles:
+    post:
+      tags: [Vehicles]
+      summary: Register a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                make:
+                  type: string
+                model:
+                  type: string
+                year:
+                  type: integer
+                  minimum: 1900
+                  maximum: 2100
+                licensePlate:
+                  type: string
+              required: [make, model, year, licensePlate]
+      responses:
+        '201':
+          description: Vehicle registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags: [Vehicles]
+      summary: List own vehicles
+      responses:
+        '200':
+          description: List of vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Appointments ─────────────────────────────────────────────────────────────
+
+  /api/appointments/availability:
+    get:
+      tags: [Appointments]
+      summary: Query available time slots for a dealership and service type
+      parameters:
+        - in: query
+          name: dealershipId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: serviceTypeId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-06-01'
+      responses:
+        '200':
+          description: Available slots (30-min increments, 08:00–18:00 UTC)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slots:
+                    type: array
+                    items:
+                      type: string
+                      format: date-time
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/appointments:
+    post:
+      tags: [Appointments]
+      summary: Book an appointment
+      description: |
+        Finds a free service bay and a qualified technician for the requested slot,
+        then creates a CONFIRMED appointment atomically. Returns 409 if no resource
+        is available (including concurrent double-booking attempts).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vehicleId:
+                  type: string
+                  format: uuid
+                dealershipId:
+                  type: string
+                  format: uuid
+                serviceTypeId:
+                  type: string
+                  format: uuid
+                startTime:
+                  type: string
+                  format: date-time
+              required: [vehicleId, dealershipId, serviceTypeId, startTime]
+      responses:
+        '201':
+          description: Appointment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vehicle not found or does not belong to caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: No bay or technician available for this slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags: [Appointments]
+      summary: List own appointments
+      responses:
+        '200':
+          description: List of appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+
+  /api/appointments/{id}:
+    get:
+      tags: [Appointments]
+      summary: Get a single appointment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Appointment detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/appointments/{id}/cancel:
+    patch:
+      tags: [Appointments]
+      summary: Cancel an appointment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '404':
+          description: Not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/appointments/{id}/reschedule:
+    patch:
+      tags: [Appointments]
+      summary: Reschedule an appointment to a new start time
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                startTime:
+                  type: string
+                  format: date-time
+              required: [startTime]
+      responses:
+        '200':
+          description: Appointment rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '404':
+          description: Not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: No resource available for the new slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Webhooks ─────────────────────────────────────────────────────────────────
+
+  /api/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Subscribe to appointment events
+      description: |
+        The URL must be HTTPS and must not resolve to a private or loopback address.
+        Deliveries are signed with HMAC-SHA256; verify the `X-Keyloop-Signature` header.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: 'https://example.com/webhook'
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - appointment.confirmed
+                      - appointment.cancelled
+                      - appointment.rescheduled
+                  minItems: 1
+              required: [url, events]
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          description: Invalid URL or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags: [Webhooks]
+      summary: List own webhook subscriptions
+      responses:
+        '200':
+          description: List of subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookSubscription'
+
+  /api/webhooks/{id}:
+    delete:
+      tags: [Webhooks]
+      summary: Unsubscribe
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Unsubscribed
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Admin ────────────────────────────────────────────────────────────────────
+
+  /admin/dealerships:
+    post:
+      tags: [Admin]
+      summary: Create a dealership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+              required: [name, address]
+      responses:
+        '201':
+          description: Dealership created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dealership'
+    get:
+      tags: [Admin]
+      summary: List dealerships
+      responses:
+        '200':
+          description: List of dealerships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Dealership'
+
+  /admin/dealerships/{id}/bays:
+    post:
+      tags: [Admin]
+      summary: Add a service bay to a dealership
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        '201':
+          description: Bay created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceBay'
+
+  /admin/dealerships/{id}/technicians:
+    post:
+      tags: [Admin]
+      summary: Add a technician to a dealership
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+              required: [name, email]
+      responses:
+        '201':
+          description: Technician created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Technician'
+
+  /admin/technicians/{id}/certifications:
+    post:
+      tags: [Admin]
+      summary: Certify a technician for a service type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceTypeId:
+                  type: string
+                  format: uuid
+              required: [serviceTypeId]
+      responses:
+        '201':
+          description: Certification added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  technicianId:
+                    type: string
+                    format: uuid
+                  serviceTypeId:
+                    type: string
+                    format: uuid
+
+  /admin/technicians/{id}/certifications/{serviceTypeId}:
+    delete:
+      tags: [Admin]
+      summary: Remove a technician certification
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: serviceTypeId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Certification removed
+
+  /admin/service-types:
+    post:
+      tags: [Admin]
+      summary: Create a service type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                durationMinutes:
+                  type: integer
+                  minimum: 1
+              required: [name, durationMinutes]
+      responses:
+        '201':
+          description: Service type created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceType'
+    get:
+      tags: [Admin]
+      summary: List service types
+      responses:
+        '200':
+          description: List of service types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceType'
