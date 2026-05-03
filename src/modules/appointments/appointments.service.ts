@@ -40,7 +40,8 @@ export class AppointmentsService {
     if (!appt) throw new NotFoundError('Appointment not found');
 
     const serviceType = await this.repo.findServiceType(appt.serviceTypeId);
-    const endTime = new Date(newStart.getTime() + serviceType!.durationMinutes * 60_000);
+    if (!serviceType) throw new NotFoundError('Service type not found');
+    const endTime = new Date(newStart.getTime() + serviceType.durationMinutes * 60_000);
     const dealershipId = appt.serviceBay.dealership.id;
 
     const bay = await this.repo.findAvailableBay(dealershipId, newStart, endTime, appointmentId);

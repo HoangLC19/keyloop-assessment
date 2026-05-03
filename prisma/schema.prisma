@@ -153,5 +153,6 @@ model Outbox {
   processedAt    DateTime? @map("processed_at")
   deadLetteredAt DateTime? @map("dead_lettered_at")
 
+  @@index([processedAt, deadLetteredAt, nextAttemptAt])
   @@map("outbox")
 }

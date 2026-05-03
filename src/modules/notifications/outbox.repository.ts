@@ -54,7 +54,7 @@ export const outboxRepository = {
         WHERE id = ${id} AND claim_token = ${claimToken}::uuid
       `;
     } else {
-      const backoffSec = Math.min(10 * Math.pow(2, attempts), 3600);
+      const backoffSec = Math.min(10 * Math.pow(2, attempts - 1), 3600);
       await prisma.$executeRaw`
         UPDATE outbox
         SET locked_at       = NULL,
