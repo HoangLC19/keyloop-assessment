@@ -4,6 +4,7 @@
   "description": "Vehicle service appointment scheduling API",
   "main": "dist/server.js",
   "scripts": {
+    "predev": "prisma migrate deploy",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
