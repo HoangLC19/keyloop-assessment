@@ -124,8 +124,20 @@ All endpoints require a `Bearer` JWT token except `/auth/*`.
 
 ## Architecture
 
-```
-HTTP → Router (Zod validation) → Service (business logic) → Repository (Prisma / raw SQL) → PostgreSQL
+### Request flow
+
+```mermaid
+flowchart LR
+    Client -->|HTTP| Router
+    Router -->|Zod validation| Service
+    Service -->|query / mutate| Repository
+    Repository -->|Prisma / raw SQL| DB[(PostgreSQL)]
+
+    subgraph Layers
+        Router
+        Service
+        Repository
+    end
 ```
 
 **Modules:**
@@ -141,6 +153,62 @@ src/
   shared/
     db/             — Prisma client singleton
     errors/         — typed error classes (400/401/403/404/409)
+```
+
+### Booking flow
+
+```mermaid
+sequenceDiagram
+    actor Customer
+    participant API
+    participant AppointmentService
+    participant DB as PostgreSQL
+
+    Customer->>API: POST /api/appointments
+    API->>AppointmentService: book(vehicleId, dealershipId, serviceTypeId, startTime)
+
+    AppointmentService->>DB: find available bay (raw SQL, no ::uuid cast)
+    DB-->>AppointmentService: bay | null
+
+    AppointmentService->>DB: find available technician (raw SQL)
+    DB-->>AppointmentService: technician | null
+
+    alt no bay or no technician
+        AppointmentService-->>API: 409 Conflict
+        API-->>Customer: 409 No resource available
+    else both free
+        AppointmentService->>DB: BEGIN TRANSACTION
+        AppointmentService->>DB: INSERT appointment (status=CONFIRMED)
+        AppointmentService->>DB: INSERT outbox row (appointment.confirmed)
+        AppointmentService->>DB: COMMIT
+
+        note over DB: btree_gist exclusion constraint<br/>rejects concurrent overlap → 23P01
+
+        DB-->>AppointmentService: appointment record
+        AppointmentService-->>API: appointment
+        API-->>Customer: 201 Created
+    end
+```
+
+### Notification flow (transactional outbox)
+
+```mermaid
+flowchart TD
+    TX[Appointment transaction] -->|atomically writes| OB[(outbox table)]
+
+    OB -->|SELECT FOR UPDATE\nSKIP LOCKED| W[Outbox Worker]
+
+    W --> Email[Email delivery\nnodemailer]
+    W --> WH[Webhook delivery\nHTTPS POST + HMAC]
+
+    Email -->|success| S1[mark delivered]
+    WH -->|success| S2[mark delivered]
+
+    Email -->|failure| R1[exponential backoff\nmax 10 retries]
+    WH -->|failure| R2[exponential backoff\nmax 10 retries]
+
+    R1 -->|attempts > 10| DL[dead-letter\nstatus=FAILED]
+    R2 -->|attempts > 10| DL
 ```
 
 ### Double-booking prevention
