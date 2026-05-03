@@ -3,3 +3,5 @@ dist/
 .env
 .superpowers/
 .worktrees/
+
+/src/generated/prisma

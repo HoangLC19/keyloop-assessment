@@ -43,7 +43,7 @@ export const outboxRepository = {
     prisma.$executeRaw`
       UPDATE outbox
       SET processed_at = NOW(), locked_at = NULL, locked_by = NULL, claim_token = NULL
-      WHERE id = ${id}::uuid AND claim_token = ${claimToken}::uuid
+      WHERE id = ${id} AND claim_token = ${claimToken}::uuid
     `,
 
   markFailed: async (id: string, claimToken: string, attempts: number) => {
@@ -51,7 +51,7 @@ export const outboxRepository = {
       await prisma.$executeRaw`
         UPDATE outbox
         SET dead_lettered_at = NOW(), locked_at = NULL, locked_by = NULL, claim_token = NULL
-        WHERE id = ${id}::uuid AND claim_token = ${claimToken}::uuid
+        WHERE id = ${id} AND claim_token = ${claimToken}::uuid
       `;
     } else {
       const backoffSec = Math.min(10 * Math.pow(2, attempts), 3600);
@@ -61,7 +61,7 @@ export const outboxRepository = {
             locked_by       = NULL,
             claim_token     = NULL,
             next_attempt_at = NOW() + (${backoffSec} * INTERVAL '1 second')
-        WHERE id = ${id}::uuid AND claim_token = ${claimToken}::uuid
+        WHERE id = ${id} AND claim_token = ${claimToken}::uuid
       `;
     }
   },

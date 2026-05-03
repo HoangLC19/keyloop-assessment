@@ -36,24 +36,24 @@ router.get('/service-types', async (_req: Request, res: Response) => {
 router.post('/dealerships/:id/bays', async (req: Request, res: Response) => {
   const p = ServiceBayBody.safeParse(req.body);
   if (!p.success) throw new ValidationError(p.error.issues[0].message);
-  res.status(201).json(await resourcesService.createServiceBay(req.params.id, p.data));
+  res.status(201).json(await resourcesService.createServiceBay(req.params.id as string, p.data));
 });
 
 router.post('/dealerships/:id/technicians', async (req: Request, res: Response) => {
   const p = TechnicianBody.safeParse(req.body);
   if (!p.success) throw new ValidationError(p.error.issues[0].message);
-  res.status(201).json(await resourcesService.createTechnician(req.params.id, p.data));
+  res.status(201).json(await resourcesService.createTechnician(req.params.id as string, p.data));
 });
 
 router.post('/technicians/:id/certifications', async (req: Request, res: Response) => {
   const p = CertificationBody.safeParse(req.body);
   if (!p.success) throw new ValidationError(p.error.issues[0].message);
-  await resourcesService.addCertification(req.params.id, p.data.serviceTypeId);
+  await resourcesService.addCertification(req.params.id as string, p.data.serviceTypeId);
   res.status(201).json({ technicianId: req.params.id, serviceTypeId: p.data.serviceTypeId });
 });
 
-router.delete('/technicians/:id/certifications/:serviceTypeId', async (_req: Request, res: Response) => {
-  await resourcesService.removeCertification(_req.params.id, _req.params.serviceTypeId);
+router.delete('/technicians/:id/certifications/:serviceTypeId', async (req: Request, res: Response) => {
+  await resourcesService.removeCertification(req.params.id as string, req.params.serviceTypeId as string);
   res.status(204).send();
 });
 

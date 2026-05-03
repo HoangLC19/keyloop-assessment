@@ -42,17 +42,17 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 router.get('/:id', async (req: Request, res: Response) => {
-  res.json(await appointmentsService.getAppointment(req.params.id, req.user!.id));
+  res.json(await appointmentsService.getAppointment(req.params.id as string, req.user!.id));
 });
 
 router.patch('/:id/cancel', async (req: Request, res: Response) => {
-  res.json(await appointmentsService.cancelAppointment(req.params.id, req.user!.id));
+  res.json(await appointmentsService.cancelAppointment(req.params.id as string, req.user!.id));
 });
 
 router.patch('/:id/reschedule', async (req: Request, res: Response) => {
   const p = RescheduleBody.safeParse(req.body);
   if (!p.success) throw new ValidationError(p.error.issues[0].message);
-  res.json(await appointmentsService.rescheduleAppointment(req.params.id, req.user!.id, new Date(p.data.startTime)));
+  res.json(await appointmentsService.rescheduleAppointment(req.params.id as string, req.user!.id, new Date(p.data.startTime)));
 });
 
 export default router;

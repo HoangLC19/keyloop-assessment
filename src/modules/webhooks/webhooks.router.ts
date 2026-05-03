@@ -20,7 +20,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 router.delete('/:id', async (req: Request, res: Response) => {
-  await webhooksService.unsubscribe(req.params.id, req.user!.id);
+  await webhooksService.unsubscribe(req.params.id as string, req.user!.id);
   res.status(204).send();
 });
 

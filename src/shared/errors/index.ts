@@ -28,8 +28,13 @@ export class ConflictError extends AppError {
 }
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
-  // Postgres exclusion_violation (SQLSTATE 23P01) — concurrent double-booking
-  if ((err as any)?.code === '23P01') {
+  // Postgres exclusion_violation (SQLSTATE 23P01) — concurrent double-booking.
+  // ORM creates throw PrismaClientUnknownRequestError (no .code); raw queries throw
+  // PrismaClientKnownRequestError P2010 with meta.code. Check all three paths.
+  const is23P01 = (err as any)?.code === '23P01'
+    || (err as any)?.meta?.code === '23P01'
+    || (typeof (err as any)?.message === 'string' && (err as any).message.includes('"23P01"'));
+  if (is23P01) {
     res.status(409).json({ error: 'No resource available for this time slot', code: 'CONFLICT' });
     return;
   }

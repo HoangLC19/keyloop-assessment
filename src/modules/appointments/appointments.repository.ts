@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import prisma from '../../shared/db/client';
 
@@ -27,14 +28,14 @@ export const appointmentsRepository: IAppointmentsRepository = {
   findAvailableBay: async (dealershipId, start, end, excludeId?) => {
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT sb.id FROM service_bays sb
-      WHERE sb.dealership_id = ${dealershipId}::uuid
+      WHERE sb.dealership_id = ${dealershipId}
         AND NOT EXISTS (
           SELECT 1 FROM appointments a
           WHERE a.service_bay_id = sb.id
             AND a.status = 'CONFIRMED'
             AND a.start_time < ${end}
             AND a.end_time   > ${start}
-            ${excludeId ? Prisma.sql`AND a.id != ${excludeId}::uuid` : Prisma.empty}
+            ${excludeId ? Prisma.sql`AND a.id != ${excludeId}` : Prisma.empty}
         )
       LIMIT 1
     `;
@@ -45,15 +46,15 @@ export const appointmentsRepository: IAppointmentsRepository = {
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT t.id FROM technicians t
       INNER JOIN technician_certifications tc ON tc.technician_id = t.id
-      WHERE t.dealership_id   = ${dealershipId}::uuid
-        AND tc.service_type_id = ${serviceTypeId}::uuid
+      WHERE t.dealership_id   = ${dealershipId}
+        AND tc.service_type_id = ${serviceTypeId}
         AND NOT EXISTS (
           SELECT 1 FROM appointments a
           WHERE a.technician_id = t.id
             AND a.status = 'CONFIRMED'
             AND a.start_time < ${end}
             AND a.end_time   > ${start}
-            ${excludeId ? Prisma.sql`AND a.id != ${excludeId}::uuid` : Prisma.empty}
+            ${excludeId ? Prisma.sql`AND a.id != ${excludeId}` : Prisma.empty}
         )
       LIMIT 1
     `;
@@ -67,8 +68,8 @@ export const appointmentsRepository: IAppointmentsRepository = {
         include: { serviceType: true, serviceBay: true, technician: true, vehicle: true },
       });
       await tx.$executeRaw`
-        INSERT INTO outbox (event_type, payload)
-        VALUES ('appointment.confirmed', ${JSON.stringify({ appointmentId: appt.id, customerId: data.customerId })}::jsonb)
+        INSERT INTO outbox (id, event_type, payload)
+        VALUES (${randomUUID()}, 'appointment.confirmed', ${JSON.stringify({ appointmentId: appt.id, customerId: data.customerId })}::jsonb)
       `;
       return appt;
     }),
@@ -83,8 +84,8 @@ export const appointmentsRepository: IAppointmentsRepository = {
     prisma.$transaction(async (tx) => {
       const appt = await tx.appointment.update({ where: { id: appointmentId }, data: { status: 'CANCELLED' } });
       await tx.$executeRaw`
-        INSERT INTO outbox (event_type, payload)
-        VALUES ('appointment.cancelled', ${JSON.stringify({ appointmentId, customerId: appt.customerId })}::jsonb)
+        INSERT INTO outbox (id, event_type, payload)
+        VALUES (${randomUUID()}, 'appointment.cancelled', ${JSON.stringify({ appointmentId, customerId: appt.customerId })}::jsonb)
       `;
       return appt;
     }),
@@ -96,8 +97,8 @@ export const appointmentsRepository: IAppointmentsRepository = {
         data: { startTime, endTime, serviceBayId: bayId, technicianId },
       });
       await tx.$executeRaw`
-        INSERT INTO outbox (event_type, payload)
-        VALUES ('appointment.rescheduled', ${JSON.stringify({ appointmentId, customerId: appt.customerId })}::jsonb)
+        INSERT INTO outbox (id, event_type, payload)
+        VALUES (${randomUUID()}, 'appointment.rescheduled', ${JSON.stringify({ appointmentId, customerId: appt.customerId })}::jsonb)
       `;
       return appt;
     }),
