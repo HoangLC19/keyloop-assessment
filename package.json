@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "predev": "prisma migrate deploy",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "DATABASE_URL=postgresql://keyloop:keyloop@localhost:5433/keyloop_test jest --runInBand",
