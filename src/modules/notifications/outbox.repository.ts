@@ -9,7 +9,9 @@ export interface OutboxRow {
   attempts: number;
 }
 
-const MAX_ATTEMPTS = 5;
+export const MAX_ATTEMPTS = 5;
+export const calcBackoffSec = (attempts: number): number =>
+  Math.min(10 * Math.pow(2, Math.max(0, attempts - 1)), 3600);
 
 export const outboxRepository = {
   claim: (workerId: string): Promise<OutboxRow[]> =>
@@ -54,7 +56,7 @@ export const outboxRepository = {
         WHERE id = ${id} AND claim_token = ${claimToken}::uuid
       `;
     } else {
-      const backoffSec = Math.min(10 * Math.pow(2, attempts - 1), 3600);
+      const backoffSec = calcBackoffSec(attempts);
       await prisma.$executeRaw`
         UPDATE outbox
         SET locked_at       = NULL,
